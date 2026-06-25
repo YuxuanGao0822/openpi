@@ -45,6 +45,11 @@ def create_trained_policy(
     repack_transforms = repack_transforms or transforms.Group()
     checkpoint_dir = download.maybe_download(str(checkpoint_dir))
 
+    if sample_kwargs is None:
+        sample_kwargs = {}
+    if train_config.model.model_type == _model.ModelType.PI0_DRIFT:
+        sample_kwargs.setdefault("num_steps", 1)
+
     # Check if this is a PyTorch model by looking for model.safetensors
     weight_path = os.path.join(checkpoint_dir, "model.safetensors")
     is_pytorch = os.path.exists(weight_path)

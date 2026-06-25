@@ -1,5 +1,7 @@
 import jax
 import jax.numpy as jnp
+from functools import partial
+
 
 def _cdist(x, y, eps=1e-8):
     """Pairwise L2 distance: [B, N, D] x [B, M, D] -> [B, N, M]."""
@@ -9,22 +11,55 @@ def _cdist(x, y, eps=1e-8):
     sq_dist = xnorms[:, :, None] + ynorms[:, None, :] - 2 * xydot
     return jnp.sqrt(jnp.clip(sq_dist, a_min=eps))
 
-def drift_loss(gen, fixed_pos, fixed_neg=None, weight_gen=None, weight_pos=None,
-               weight_neg=None, R_list=(0.02, 0.05, 0.2)):
-    """JAX implementation of the debiased Sinkhorn/W-Flow loss."""
+
+@partial(jax.jit, static_argnames=("R_list", "plus_only", "use_neg_only"))
+def drift_loss(
+    gen,
+    fixed_pos,
+    fixed_neg=None,
+    weight_gen=None,
+    weight_pos=None,
+    weight_neg=None,
+    R_list=(0.02, 0.05, 0.2),
+    plus_only=False,
+    use_neg_only=False,
+):
+    """
+    Drift loss optimized for JAX, ported from DFP.
+
+    Args:
+        gen: [B, C_g, S] generated samples
+        fixed_pos: [B, C_p, S] positive (real) samples
+        fixed_neg: [B, C_n, S] negative samples (optional, can be None)
+        weight_gen: [B, C_g] (optional; if None: weight is 1)
+        weight_pos: [B, C_p] (optional; if None: weight is 1)
+        weight_neg: [B, C_n] (optional; if None: weight is 1)
+        R_list: a list of R values to use for the kernel function
+        plus_only: if True, drop the negative drifting field and only use
+            the positive (attractive) force contribution.
+        use_neg_only: if True, use only `fixed_neg` as negative targets and
+            do not include the generated samples themselves as implicit
+            negatives. Implies no diagonal self-exclusion mask is needed.
+
+    Returns:
+        loss: [batch_size]
+        info: dict with entries 'scale' and 'loss_R' for each R value
+    """
+
+    # 1. Defaults & Casting
     B, C_g, S = gen.shape
     C_p = fixed_pos.shape[1]
 
     if fixed_neg is None:
-        fixed_neg = jnp.zeros((B, 0, S), dtype=gen.dtype)
+        fixed_neg = jnp.zeros_like(gen[:, :0, :])
     C_n = fixed_neg.shape[1]
 
     if weight_gen is None:
-        weight_gen = jnp.ones((B, C_g), dtype=gen.dtype)
+        weight_gen = jnp.ones_like(gen[:, :, 0])
     if weight_pos is None:
-        weight_pos = jnp.ones((B, C_p), dtype=gen.dtype)
+        weight_pos = jnp.ones_like(fixed_pos[:, :, 0])
     if weight_neg is None:
-        weight_neg = jnp.ones((B, C_n), dtype=gen.dtype)
+        weight_neg = jnp.ones_like(fixed_neg[:, :, 0])
 
     gen = gen.astype(jnp.float32)
     fixed_pos = fixed_pos.astype(jnp.float32)
@@ -34,74 +69,80 @@ def drift_loss(gen, fixed_pos, fixed_neg=None, weight_gen=None, weight_pos=None,
     weight_neg = weight_neg.astype(jnp.float32)
 
     old_gen = jax.lax.stop_gradient(gen)
-    targets = jnp.concatenate([old_gen, fixed_neg, fixed_pos], axis=1)
-    targets_w = jnp.concatenate([weight_gen, weight_neg, weight_pos], axis=1)
+    if use_neg_only:
+        targets = jnp.concatenate([fixed_neg, fixed_pos], axis=1)
+        targets_w = jnp.concatenate([weight_neg, weight_pos], axis=1)
+    else:
+        targets = jnp.concatenate([old_gen, fixed_neg, fixed_pos], axis=1)
+        targets_w = jnp.concatenate([weight_gen, weight_neg, weight_pos], axis=1)
 
-    # Goal computation (no gradients)
-    dist = _cdist(old_gen, targets)
-    weighted_dist = dist * targets_w[:, None, :]
-    scale = weighted_dist.mean() / targets_w.mean()
+    # 2. Core Logic (Wrapped for stop_gradient optimization)
+    def calculate_scaled_goal_and_factor(old_gen_in, targets_in, targets_w_in):
+        info = {}
+        dist = _cdist(old_gen_in, targets_in)
+        weighted_dist = dist * targets_w_in[:, None, :]
+        scale = weighted_dist.mean() / targets_w_in.mean()
+        info["scale"] = scale
 
-    scale_inputs = jnp.clip(scale / (S ** 0.5), a_min=1e-3)
-    old_gen_scaled = old_gen / scale_inputs
-    targets_scaled = targets / scale_inputs
+        scale_inputs = jnp.clip(scale / jnp.sqrt(S), a_min=1e-3)
+        old_gen_scaled = old_gen_in / scale_inputs
+        targets_scaled = targets_in / scale_inputs
 
-    dist_normed = dist / jnp.clip(scale, a_min=1e-3)
+        dist_normed = dist / jnp.clip(scale, a_min=1e-3)
 
-    # Mask self-connections for gen block
-    mask_val = 100.0
-    diag_mask = jnp.eye(C_g, dtype=gen.dtype)
-    block_mask = jnp.pad(diag_mask, ((0, 0), (0, C_n + C_p)))
-    block_mask = block_mask[None, :, :]
-    dist_normed = dist_normed + block_mask * mask_val
+        if not use_neg_only:
+            mask_val = 100.0
+            diag_mask = jnp.eye(C_g, dtype=jnp.float32)
+            block_mask = jnp.pad(diag_mask, ((0, 0), (0, C_n + C_p)))
+            block_mask = jnp.expand_dims(block_mask, 0)
+            dist_normed = dist_normed + block_mask * mask_val
 
-    force_across_R = jnp.zeros_like(old_gen_scaled)
-    info = {"scale": scale}
+        force_across_R = jnp.zeros_like(old_gen_scaled)
 
-    for R in R_list:
-        logits = -dist_normed / R
+        for R in R_list:
+            logits = -dist_normed / R
 
-        # softmax along axis=-1 and axis=-2
-        affinity = jax.nn.softmax(logits, axis=-1)
-        aff_transpose = jax.nn.softmax(logits, axis=-2)
-        affinity = jnp.sqrt(jnp.clip(affinity * aff_transpose, a_min=1e-6))
+            affinity = jax.nn.softmax(logits, axis=-1)
+            aff_transpose = jax.nn.softmax(logits, axis=-2)
+            affinity = jnp.sqrt(jnp.clip(affinity * aff_transpose, a_min=1e-6))
 
-        affinity = affinity * targets_w[:, None, :]
+            affinity = affinity * targets_w_in[:, None, :]
 
-        split_idx = C_g + C_n
-        aff_neg = affinity[:, :, :split_idx]
-        aff_pos = affinity[:, :, split_idx:]
+            split_idx = C_n if use_neg_only else C_g + C_n
+            aff_neg = affinity[:, :, :split_idx]
+            aff_pos = affinity[:, :, split_idx:]
 
-        sum_pos = aff_pos.sum(axis=-1, keepdims=True)
-        r_coeff_neg = -aff_neg * sum_pos
-        sum_neg = aff_neg.sum(axis=-1, keepdims=True)
-        r_coeff_pos = aff_pos * sum_neg
+            sum_pos = jnp.sum(aff_pos, axis=-1, keepdims=True)
+            r_coeff_neg = -aff_neg * sum_pos
+            sum_neg = jnp.sum(aff_neg, axis=-1, keepdims=True)
+            r_coeff_pos = aff_pos * sum_neg
 
-        R_coeff = jnp.concatenate([r_coeff_neg, r_coeff_pos], axis=2)
+            if plus_only:
+                r_coeff_neg = jnp.zeros_like(r_coeff_neg)
+            R_coeff = jnp.concatenate([r_coeff_neg, r_coeff_pos], axis=2)
 
-        total_force_R = jnp.einsum("biy,byx->bix", R_coeff, targets_scaled)
+            total_force_R = jnp.einsum("biy,byx->bix", R_coeff, targets_scaled)
 
-        total_coeffs = R_coeff.sum(axis=-1)
-        total_force_R = total_force_R - total_coeffs[:, :, None] * old_gen_scaled
+            total_coeffs = R_coeff.sum(axis=-1)
+            total_force_R = total_force_R - total_coeffs[..., None] * old_gen_scaled
+            f_norm_val = (total_force_R ** 2).mean()
 
-        f_norm_val = jnp.mean(jnp.square(total_force_R))
-        info[f"loss_{R}"] = f_norm_val
+            info[f"loss_{R}"] = f_norm_val
 
-        force_scale = jnp.sqrt(jnp.clip(f_norm_val, a_min=1e-8))
-        force_across_R = force_across_R + total_force_R / force_scale
+            force_scale = jnp.sqrt(jnp.clip(f_norm_val, a_min=1e-8))
+            force_across_R = force_across_R + total_force_R / force_scale
 
-    goal_scaled = old_gen_scaled + force_across_R
+        goal_scaled = old_gen_scaled + force_across_R
 
-    # Stop gradient on target variables
-    goal_scaled = jax.lax.stop_gradient(goal_scaled)
-    scale_inputs = jax.lax.stop_gradient(scale_inputs)
+        return goal_scaled, scale_inputs, info
 
-    # Loss with gradients through gen
+    # 3. Compute Goal (With strict stop_gradient wrapping)
+    goal_scaled, scale_inputs, info = jax.lax.stop_gradient(
+        calculate_scaled_goal_and_factor(old_gen, targets, targets_w)
+    )
     gen_scaled = gen / scale_inputs
     diff = gen_scaled - goal_scaled
-    loss = jnp.mean(jnp.square(diff), axis=(-1, -2))
-
-    # average the info dict entries
-    info = {k: jnp.mean(v) for k, v in info.items()}
+    loss = jnp.mean(diff ** 2, axis=(-1, -2))
+    info = jax.tree.map(lambda x: x.mean(), info)
 
     return loss, info

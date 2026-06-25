@@ -76,10 +76,14 @@ class Pi0Drift(Pi0):
         
         # 4. Compute drift loss
         drift_temps = getattr(self.config, "drift_temps", (0.02, 0.05, 0.2))
+        drift_plus_only = getattr(self.config, "drift_plus_only", False)
+        drift_use_neg_only = getattr(self.config, "drift_use_neg_only", False)
         loss, info = drift_loss(
             gen=gen_actions_flat,
             fixed_pos=actions_flat,
             R_list=drift_temps,
+            plus_only=drift_plus_only,
+            use_neg_only=drift_use_neg_only,
         )
         
         # 5. Broadcast loss from shape [B] to shape [B, action_horizon]

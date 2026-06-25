@@ -10,6 +10,8 @@ from openpi.shared import array_typing as at
 class Pi0DriftConfig(Pi0Config):
     gen_per_label: int = 8
     drift_temps: tuple[float, ...] = (0.02, 0.05, 0.2)
+    drift_plus_only: bool = False
+    drift_use_neg_only: bool = False
 
     @property
     @override
