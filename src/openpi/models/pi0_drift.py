@@ -1,13 +1,19 @@
 import jax
 import jax.numpy as jnp
+import flax.nnx as nnx
 from typing_extensions import override
 
 from openpi.models import model as _model
 from openpi.models.pi0 import Pi0, make_attn_mask
 from openpi.models.drifting_util import drift_loss
 from openpi.shared import array_typing as at
+from openpi.models.pi0_drift_config import Pi0DriftConfig
 
 class Pi0Drift(Pi0):
+    def __init__(self, config: Pi0DriftConfig, rngs: nnx.Rngs):
+        super().__init__(config, rngs)
+        self.config = config
+
     @override
     def compute_loss(
         self, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions, *, train: bool = False
