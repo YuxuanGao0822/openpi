@@ -979,7 +979,7 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_drift_libero",
-        model=pi0_drift_config.Pi0DriftConfig(),
+        model=pi0_drift_config.Pi0DriftConfig(gen_per_label=4),
         data=LeRobotLiberoDataConfig(
             repo_id="physical-intelligence/libero",
             base_config=DataConfig(
@@ -988,6 +988,7 @@ _CONFIGS = [
             extra_delta_transform=True,
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        batch_size=8,
         num_train_steps=30_000,
     ),
     # RoboArena & PolaRiS configs.
