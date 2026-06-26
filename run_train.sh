@@ -32,10 +32,21 @@ export CUDA_VISIBLE_DEVICES=$GPUS
 export XLA_PYTHON_CLIENT_PREALLOCATE=true
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95
 
-# 5. Launch training
-echo "Starting Drifting VLA training on GPU(s): $GPUS (fsdp-devices: $NUM_GPUS)..."
-uv run scripts/train.py pi0_drift_libero \
+# 5. Launch training with nohup to run in the background
+LOG_FILE="train.log"
+echo "Starting Drifting VLA training in the background on GPU(s): $GPUS (fsdp-devices: $NUM_GPUS)..."
+echo "Logs will be written to: $LOG_FILE"
+
+nohup uv run scripts/train.py pi0_drift_libero \
     --exp-name my_drifting_vla_run \
     --overwrite \
-    --fsdp-devices $NUM_GPUS
+    --fsdp-devices $NUM_GPUS > "$LOG_FILE" 2>&1 &
+
+PID=$!
+echo "Training launched in background with PID: $PID"
+echo "--------------------------------------------------"
+echo "To monitor the training progress, run:"
+echo "  tail -f $LOG_FILE"
+echo "--------------------------------------------------"
+
 
