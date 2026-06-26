@@ -24,6 +24,12 @@ if [ ! -f "$STATS_FILE" ]; then
     echo "Normalization stats not found at $STATS_FILE."
     echo "Running compute_norm_stats.py on GPU $FIRST_GPU..."
     CUDA_VISIBLE_DEVICES=$FIRST_GPU uv run scripts/compute_norm_stats.py --config-name=pi0_drift_libero
+    
+    # Verify if stats computation succeeded
+    if [ $? -ne 0 ]; then
+        echo "Error: Normalization stats computation failed! Exiting without launching training."
+        exit 1
+    fi
 else
     echo "Found normalization stats at $STATS_FILE. Skipping statistics computation."
 fi
