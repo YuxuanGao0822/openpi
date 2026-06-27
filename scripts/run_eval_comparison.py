@@ -105,6 +105,7 @@ def worker(
         cmd = [sys.executable, "scripts/serve_policy.py", "--port", str(port)]
         if job_type == "drift":
             cmd.extend([
+                "policy:checkpoint",
                 "--policy.config", args.checkpoint_config,
                 "--policy.dir", checkpoint_dir
             ])
@@ -112,13 +113,14 @@ def worker(
         else:
             if args.baseline_dir:
                 cmd.extend([
+                    "policy:checkpoint",
                     "--policy.config", args.baseline_config,
                     "--policy.dir", args.baseline_dir
                 ])
             else:
                 cmd.extend([
                     "--env", "libero",
-                    "--policy", "default"
+                    "policy:default"
                 ])
             log_name = f"server_baseline_gpu{gpu_id}.log"
 
