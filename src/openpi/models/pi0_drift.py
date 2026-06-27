@@ -92,5 +92,9 @@ class Pi0Drift(Pi0):
             use_neg_only=drift_use_neg_only,
         )
         
-        # 5. Broadcast loss from shape [B] to shape [B, action_horizon]
-        return jnp.tile(loss[:, None], (1, self.action_horizon))
+        # 5. Compute MSE error between generated actions and ground truth
+        mse_error = jnp.mean(jnp.square(gen_actions_flat - actions_flat))
+        aux = {"mse_error": mse_error}
+        
+        # 6. Broadcast loss from shape [B] to shape [B, action_horizon]
+        return jnp.tile(loss[:, None], (1, self.action_horizon)), aux
