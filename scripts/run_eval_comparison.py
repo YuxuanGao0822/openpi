@@ -134,6 +134,13 @@ def worker(
         env["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.50"
         env["MUJOCO_GL"] = "egl"
 
+        # Append third_party/libero to PYTHONPATH to allow finding libero
+        libero_path = os.path.join(ROOT_DIR, "third_party", "libero")
+        if "PYTHONPATH" in env:
+            env["PYTHONPATH"] = f"{libero_path}:{env['PYTHONPATH']}"
+        else:
+            env["PYTHONPATH"] = libero_path
+
         # Spawn Policy Server
         proc = subprocess.Popen(
             cmd,
@@ -170,7 +177,7 @@ def worker(
         ]
 
         logger.info(f"Running client for suite {suite} connecting to port {port}...")
-        client_res = subprocess.run(client_cmd, cwd=ROOT_DIR, check=False)
+        client_res = subprocess.run(client_cmd, cwd=ROOT_DIR, env=env, check=False)
 
         # 4. Clean up Policy Server
         proc.terminate()
