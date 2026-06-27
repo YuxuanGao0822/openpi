@@ -46,14 +46,19 @@ def kill_port_owner(port: int):
 
 
 def wait_for_port(port: int, host: str = "127.0.0.1", timeout: float = 120.0) -> bool:
-    """Wait for the port to start listening."""
+    """Wait for the port to start listening by checking if we fail to bind to it."""
     start_time = time.time()
     while time.time() - start_time < timeout:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            with socket.create_connection((host, port), timeout=1.0):
-                return True
-        except (socket.timeout, ConnectionRefusedError):
+            s.bind((host, port))
+            # We succeeded in binding, which means NO server is listening yet
+            s.close()
             time.sleep(1.0)
+        except OSError:
+            # We failed to bind, meaning the port is occupied and the server is listening
+            s.close()
+            return True
     return False
 
 
