@@ -174,11 +174,11 @@ def worker(
         client_cmd = [
             sys.executable,
             "examples/libero/eval_with_timing.py",
-            "--host", args.host,
-            "--port", str(port),
-            "--task-suite-name", suite,
-            "--num-trials-per-task", str(args.num_trials),
-            "--summary-out-path", summary_path
+            "--args.host", args.host,
+            "--args.port", str(port),
+            "--args.task-suite-name", suite,
+            "--args.num-trials-per-task", str(args.num_trials),
+            "--args.summary-out-path", summary_path
         ]
 
         logger.info(f"Running client for suite {suite} connecting to port {port}...")
