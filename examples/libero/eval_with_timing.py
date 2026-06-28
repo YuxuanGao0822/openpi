@@ -22,6 +22,14 @@ import imageio
 from libero.libero import benchmark
 from libero.libero import get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
+
+# Post-import fix: set MUJOCO_EGL_DEVICE_ID to "0" for runtime MuJoCo,
+# since CUDA_VISIBLE_DEVICES masks the GPU to 1 device (index 0).
+# This satisfies robosuite's import-time check (which requires device ID to match CUDA_VISIBLE_DEVICES)
+# and MuJoCo's runtime check (which requires device ID to be in range [0, num_visible_devices-1]).
+import os
+os.environ["MUJOCO_EGL_DEVICE_ID"] = "0"
+
 import numpy as np
 from openpi_client import image_tools
 from openpi_client import websocket_client_policy as _websocket_client_policy

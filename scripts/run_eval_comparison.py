@@ -138,7 +138,7 @@ def worker(
         env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
         env["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.50"
         env["MUJOCO_GL"] = "egl"
-        env["MUJOCO_EGL_DEVICE_ID"] = "0"
+        env["MUJOCO_EGL_DEVICE_ID"] = str(gpu_id)
         env["no_proxy"] = "localhost,127.0.0.1"
         env["NO_PROXY"] = "localhost,127.0.0.1"
 
