@@ -5,6 +5,18 @@ import math
 import pathlib
 import time
 import json
+import functools
+import torch
+
+# Patch torch.load to default to weights_only=False (pre-PyTorch 2.6 behavior)
+# to allow loading numpy structures in libero benchmark config files
+_original_load = torch.load
+@functools.wraps(_original_load)
+def _patched_load(*args, **kwargs):
+    if "weights_only" not in kwargs:
+        kwargs["weights_only"] = False
+    return _original_load(*args, **kwargs)
+torch.load = _patched_load
 
 import imageio
 from libero.libero import benchmark
