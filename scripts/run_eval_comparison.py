@@ -138,6 +138,8 @@ def worker(
         env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
         env["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.50"
         env["MUJOCO_GL"] = "egl"
+        env["no_proxy"] = "localhost,127.0.0.1"
+        env["NO_PROXY"] = "localhost,127.0.0.1"
 
         # Append third_party/libero to PYTHONPATH to allow finding libero
         libero_path = os.path.join(ROOT_DIR, "third_party", "libero")
