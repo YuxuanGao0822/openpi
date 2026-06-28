@@ -435,16 +435,21 @@ def main():
             sys.exit(1)
         subdirs = os.listdir(checkpoint_base)
         steps = []
+        # By default, only evaluate the specified late checkpoints
+        target_steps = {20000, 25000, 29999}
         for d in subdirs:
             if d.isdigit() and os.path.isdir(os.path.join(checkpoint_base, d)):
-                steps.append(int(d))
-        steps.sort()
+                val = int(d)
+                if val in target_steps:
+                    steps.append(val)
+        # Sort descending to evaluate from 29999 down to 20000
+        steps.sort(reverse=True)
         if not steps:
-            logging.error(f"No digit step directories found in {checkpoint_base}")
+            logging.error(f"None of the target steps [29999, 25000, 20000] found in {checkpoint_base}")
             sys.exit(1)
-        logging.info(f"Auto-discovered checkpoint steps: {steps}")
+        logging.info(f"Auto-discovered target checkpoint steps (descending): {steps}")
     else:
-        steps = sorted(args.steps)
+        steps = sorted(args.steps, reverse=True)
 
     # 2. Build Job Queue
     job_queue = queue.Queue()
