@@ -112,18 +112,33 @@ class ModelTransformFactory(GroupFactory):
     default_prompt: str | None = None
 
     def __call__(self, model_config: _model.BaseModelConfig) -> _transforms.Group:
+        is_pi05 = getattr(model_config, "pi05", False) or model_config.model_type == _model.ModelType.PI05
         match model_config.model_type:
             case _model.ModelType.PI0 | _model.ModelType.PI0_DRIFT:
-                return _transforms.Group(
-                    inputs=[
-                        _transforms.InjectDefaultPrompt(self.default_prompt),
-                        _transforms.ResizeImages(224, 224),
-                        _transforms.TokenizePrompt(
-                            _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
-                        ),
-                        _transforms.PadStatesAndActions(model_config.action_dim),
-                    ],
-                )
+                if is_pi05:
+                    assert isinstance(model_config, pi0_config.Pi0Config)
+                    return _transforms.Group(
+                        inputs=[
+                            _transforms.InjectDefaultPrompt(self.default_prompt),
+                            _transforms.ResizeImages(224, 224),
+                            _transforms.TokenizePrompt(
+                                _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
+                                discrete_state_input=model_config.discrete_state_input,
+                            ),
+                            _transforms.PadStatesAndActions(model_config.action_dim),
+                        ],
+                    )
+                else:
+                    return _transforms.Group(
+                        inputs=[
+                            _transforms.InjectDefaultPrompt(self.default_prompt),
+                            _transforms.ResizeImages(224, 224),
+                            _transforms.TokenizePrompt(
+                                _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
+                            ),
+                            _transforms.PadStatesAndActions(model_config.action_dim),
+                        ],
+                    )
             case _model.ModelType.PI05:
                 assert isinstance(model_config, pi0_config.Pi0Config)
                 return _transforms.Group(
@@ -185,7 +200,10 @@ class DataConfigFactory(abc.ABC):
             repo_id=repo_id,
             asset_id=asset_id,
             norm_stats=self._load_norm_stats(epath.Path(self.assets.assets_dir or assets_dirs), asset_id),
-            use_quantile_norm=model_config.model_type not in (ModelType.PI0, ModelType.PI0_DRIFT),
+            use_quantile_norm=(
+                model_config.model_type not in (ModelType.PI0, ModelType.PI0_DRIFT)
+                or (model_config.model_type == ModelType.PI0_DRIFT and getattr(model_config, "pi05", False))
+            ),
         )
 
     def _load_norm_stats(self, assets_dir: epath.Path, asset_id: str | None) -> dict[str, _transforms.NormStats] | None:
@@ -990,6 +1008,22 @@ _CONFIGS = [
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
         batch_size=8,
         num_train_steps=30_000,
+        save_interval=20000,
+    ),
+    TrainConfig(
+        name="pi05_drift_libero",
+        model=pi0_drift_config.Pi0DriftConfig(pi05=True, action_horizon=10, discrete_state_input=False, gen_per_label=8),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=True,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        batch_size=4,
+        num_train_steps=30_000,
+        save_interval=20000,
     ),
     # RoboArena & PolaRiS configs.
     *roboarena_config.get_roboarena_configs(),

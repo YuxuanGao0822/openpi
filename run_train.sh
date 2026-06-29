@@ -4,26 +4,34 @@
 # Supports selectable single/multi-GPU execution.
 # -----------------------------------------------------------------------------
 
-# 1. Parse GPU configuration (defaults to GPU 0 if not provided)
-# Usage: ./run_train.sh [gpu_ids] (e.g., ./run_train.sh 0,1)
+# 1. Parse GPU and Config configurations (defaults to GPU 0 and pi0_drift_libero if not provided)
+# Usage: ./run_train.sh [gpu_ids] [config_name] (e.g., ./run_train.sh 0,1 pi05_drift_libero)
 GPUS=${1:-"0"}
+CONFIG_NAME=${2:-"pi0_drift_libero"}
 FIRST_GPU=$(echo "$GPUS" | cut -d',' -f1)
 
 # Count the number of GPUs
 NUM_GPUS=$(echo "$GPUS" | tr -cd ',' | wc -c)
 NUM_GPUS=$((NUM_GPUS + 1))
 
-# Dynamically calculate global batch size to maintain a safe local batch size of 8 per GPU
-BATCH_SIZE=$((NUM_GPUS * 8))
+# Dynamically calculate global batch size to maintain a safe local batch size (4 for pi05_drift, 8 otherwise)
+if [ "$CONFIG_NAME" = "pi05_drift_libero" ]; then
+    PER_GPU_BATCH=4
+else
+    PER_GPU_BATCH=8
+fi
+BATCH_SIZE=$((NUM_GPUS * PER_GPU_BATCH))
 
-echo "Configured GPUs: $GPUS (Total: $NUM_GPUS, First: $FIRST_GPU, Global Batch Size: $BATCH_SIZE)"
+echo "Configured GPUs: $GPUS (Total: $NUM_GPUS, First: $FIRST_GPU)"
+echo "Configured Model/Task Config Name: $CONFIG_NAME"
+echo "Configured Local Batch Size per GPU: $PER_GPU_BATCH (Global Batch Size: $BATCH_SIZE)"
 
 # 2. Check and compute normalization statistics if missing
-STATS_FILE="./assets/pi0_drift_libero/physical-intelligence/libero/norm_stats.json"
+STATS_FILE="./assets/${CONFIG_NAME}/physical-intelligence/libero/norm_stats.json"
 if [ ! -f "$STATS_FILE" ]; then
     echo "Normalization stats not found at $STATS_FILE."
     echo "Running compute_norm_stats.py on GPU $FIRST_GPU..."
-    CUDA_VISIBLE_DEVICES=$FIRST_GPU uv run scripts/compute_norm_stats.py --config-name=pi0_drift_libero
+    CUDA_VISIBLE_DEVICES=$FIRST_GPU uv run scripts/compute_norm_stats.py --config-name=$CONFIG_NAME
     
     # Verify if stats computation succeeded
     if [ $? -ne 0 ]; then
@@ -46,7 +54,7 @@ LOG_FILE="train.log"
 echo "Starting Drifting VLA training in the background on GPU(s): $GPUS (fsdp-devices: $NUM_GPUS)..."
 echo "Logs will be written to: $LOG_FILE"
 
-nohup uv run scripts/train.py pi0_drift_libero \
+nohup uv run scripts/train.py $CONFIG_NAME \
     --exp-name my_drifting_vla_run \
     --overwrite \
     --batch-size $BATCH_SIZE \

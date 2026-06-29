@@ -181,6 +181,7 @@ def worker(
             "--args.port", str(port),
             "--args.task-suite-name", suite,
             "--args.num-trials-per-task", str(args.num_trials),
+            "--args.replan-steps", str(args.replan_steps),
             "--args.summary-out-path", summary_path
         ]
 
@@ -377,6 +378,12 @@ def main():
         type=int,
         default=50,
         help="Number of trials/rollouts per task in each suite"
+    )
+    parser.add_argument(
+        "--replan-steps",
+        type=int,
+        default=5,
+        help="Number of environment steps before querying policy server again for planning"
     )
     parser.add_argument(
         "--gpus",

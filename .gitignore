@@ -11,7 +11,7 @@ __pycache__/
 
 # C extensions
 *.so
-
+drift_result/
 # Distribution / packaging
 .Python
 build/
