@@ -17,18 +17,27 @@ def _patched_load(*args, **kwargs):
         kwargs["weights_only"] = False
     return _original_load(*args, **kwargs)
 torch.load = _patched_load
+# Post-import fix: set MUJOCO_EGL_DEVICE_ID to "0" for runtime MuJoCo,
+# since CUDA_VISIBLE_DEVICES masks the GPU to 1 device (index 0).
+# This satisfies robosuite's import-time check (which requires device ID to match CUDA_VISIBLE_DEVICES)
+# and MuJoCo's runtime check (which requires device ID to be in range [0, num_visible_devices-1]).
+import os
+original_cuda = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+# Fake EGL device ID to "0" for mujoco EGL display init
+os.environ["MUJOCO_EGL_DEVICE_ID"] = "0"
+# Fake CUDA_VISIBLE_DEVICES to include "0" (e.g. "2,0") to bypass robosuite's validation string match check
+if original_cuda:
+    os.environ["CUDA_VISIBLE_DEVICES"] = f"{original_cuda},0"
+else:
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import imageio
 from libero.libero import benchmark
 from libero.libero import get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 
-# Post-import fix: set MUJOCO_EGL_DEVICE_ID to "0" for runtime MuJoCo,
-# since CUDA_VISIBLE_DEVICES masks the GPU to 1 device (index 0).
-# This satisfies robosuite's import-time check (which requires device ID to match CUDA_VISIBLE_DEVICES)
-# and MuJoCo's runtime check (which requires device ID to be in range [0, num_visible_devices-1]).
-import os
-os.environ["MUJOCO_EGL_DEVICE_ID"] = "0"
+# Restore original CUDA_VISIBLE_DEVICES to prevent JAX/PyTorch from seeing GPU 0
+os.environ["CUDA_VISIBLE_DEVICES"] = original_cuda
 
 import numpy as np
 from openpi_client import image_tools
