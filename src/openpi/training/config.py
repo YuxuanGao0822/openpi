@@ -689,10 +689,10 @@ _CONFIGS = [
         ),
         # Here you define which pre-trained checkpoint you want to load to initialize the model.
         # This should match the model config you chose above -- i.e. in this case we use the pi0 base model.
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
         # Below you can define other hyperparameters like the learning rate, number of training steps, etc.
         # Check the base TrainConfig class for a full list of available hyperparameters.
         num_train_steps=30_000,
+        save_interval=5000,
     ),
     TrainConfig(
         name="pi0_libero_low_mem_finetune",
@@ -765,20 +765,12 @@ _CONFIGS = [
         data=LeRobotLiberoDataConfig(
             repo_id="physical-intelligence/libero",
             base_config=DataConfig(prompt_from_task=True),
-            extra_delta_transform=False,
         ),
-        batch_size=256,
-        lr_schedule=_optimizer.CosineDecaySchedule(
-            warmup_steps=10_000,
-            peak_lr=5e-5,
-            decay_steps=1_000_000,
-            decay_lr=5e-5,
-        ),
-        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
-        ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        batch_size=4,
         num_train_steps=30_000,
+        save_interval=5000,
     ),
     #
     # Fine-tuning Aloha configs.
@@ -1008,7 +1000,7 @@ _CONFIGS = [
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
         batch_size=8,
         num_train_steps=30_000,
-        save_interval=20000,
+        save_interval=5000,
     ),
     TrainConfig(
         name="pi05_drift_libero",
@@ -1023,7 +1015,137 @@ _CONFIGS = [
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
         batch_size=4,
         num_train_steps=30_000,
-        save_interval=20000,
+        save_interval=5000,
+    ),
+    # --- DriftingVLA LCDF Experiment Configs ---
+    # LCDF Scheme C only: CFG training (10% language drop) + CFG inference (scale=1.5)
+    TrainConfig(
+        name="pi0_drift_lcdf_libero",
+        model=pi0_drift_config.Pi0DriftConfig(
+            gen_per_label=4,
+            cfg_drop_rate=0.1,
+            cfg_scale=1.5,
+        ),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=True,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        batch_size=8,
+        num_train_steps=30_000,
+        save_interval=5000,
+    ),
+    # LCDF Scheme B only: in-batch cross-language negative sampling
+    TrainConfig(
+        name="pi0_drift_neg_libero",
+        model=pi0_drift_config.Pi0DriftConfig(
+            gen_per_label=4,
+            use_cross_lang_negatives=True,
+        ),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=True,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        batch_size=8,
+        num_train_steps=30_000,
+        save_interval=5000,
+    ),
+    # LCDF Scheme B + C combined: full LCDF
+    TrainConfig(
+        name="pi0_drift_lcdf_full_libero",
+        model=pi0_drift_config.Pi0DriftConfig(
+            gen_per_label=4,
+            cfg_drop_rate=0.1,
+            cfg_scale=1.5,
+            use_cross_lang_negatives=True,
+        ),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=True,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        batch_size=8,
+        num_train_steps=30_000,
+        save_interval=5000,
+    ),
+    # LCDF Scheme C only for Pi0.5: CFG training (10% language drop) + CFG inference (scale=1.5)
+    TrainConfig(
+        name="pi05_drift_lcdf_libero",
+        model=pi0_drift_config.Pi0DriftConfig(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            gen_per_label=8,
+            cfg_drop_rate=0.1,
+            cfg_scale=1.5,
+        ),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=True,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        batch_size=4,
+        num_train_steps=30_000,
+        save_interval=5000,
+    ),
+    # LCDF Scheme B only for Pi0.5: in-batch cross-language negative sampling
+    TrainConfig(
+        name="pi05_drift_neg_libero",
+        model=pi0_drift_config.Pi0DriftConfig(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            gen_per_label=8,
+            use_cross_lang_negatives=True,
+        ),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=True,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        batch_size=4,
+        num_train_steps=30_000,
+        save_interval=5000,
+    ),
+    # LCDF Scheme B + C combined for Pi0.5: full LCDF
+    TrainConfig(
+        name="pi05_drift_lcdf_full_libero",
+        model=pi0_drift_config.Pi0DriftConfig(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            gen_per_label=8,
+            cfg_drop_rate=0.1,
+            cfg_scale=1.5,
+            use_cross_lang_negatives=True,
+        ),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=True,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        batch_size=4,
+        num_train_steps=30_000,
+        save_interval=5000,
     ),
     # RoboArena & PolaRiS configs.
     *roboarena_config.get_roboarena_configs(),

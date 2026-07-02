@@ -15,7 +15,7 @@ NUM_GPUS=$(echo "$GPUS" | tr -cd ',' | wc -c)
 NUM_GPUS=$((NUM_GPUS + 1))
 
 # Dynamically calculate global batch size to maintain a safe local batch size (4 for pi05_drift, 8 otherwise)
-if [ "$CONFIG_NAME" = "pi05_drift_libero" ]; then
+if [[ "$CONFIG_NAME" == pi05* ]]; then
     PER_GPU_BATCH=4
 else
     PER_GPU_BATCH=8
