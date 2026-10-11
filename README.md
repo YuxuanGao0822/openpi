@@ -325,3 +325,5 @@ We will collect common issues and their solutions here. If you encounter an issu
 ## T²Mem reproduction on RoboMME
 
 This checkout includes an implementation of T²Mem on the openpi PyTorch π0.5 backbone, with chronological memory training and RoboMME evaluation. See [the reproduction and server runbook](docs/t2mem_reproduction.md) for paper mapping, disclosed implementation choices, setup, training, and benchmark commands. Local verification is static only; numerical and GPU checks are provided for the server.
+
+For **PickXtimes on one A100 80 GB (physical GPU 6)**, use [the single-GPU baseline and T²Mem runbook](docs/pickxtimes_a100.md). Its commands use the server checkout at `/data1/workspace/gaoyuxuan/openpi`.

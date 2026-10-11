@@ -17,9 +17,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--tasks", nargs="+", choices=TASKS, default=list(TASKS))
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     for archive in args.input.rglob("*.h5.tar.xz"):
+        if archive.name.split(".")[0].split("_")[-1] not in args.tasks:
+            continue
         with tarfile.open(archive, "r:xz") as bundle:
             for member in bundle.getmembers():
                 if member.isfile() and member.name.endswith(".h5"):
@@ -28,6 +31,8 @@ def main():
                         with bundle.extractfile(member) as source, target.open("wb") as destination:
                             shutil.copyfileobj(source, destination)
     for archive in args.input.rglob("*.h5.xz"):
+        if archive.name.split(".")[0].split("_")[-1] not in args.tasks:
+            continue
         target = archive.with_suffix("")
         if not target.exists():
             with lzma.open(archive, "rb") as source, target.open("wb") as destination:
@@ -35,7 +40,7 @@ def main():
     manifest, states, actions = [], [], []
     for path in sorted(args.input.rglob("*.h5")):
         task = path.stem.split("_")[-1]
-        if task not in TASKS:
+        if task not in args.tasks:
             continue
         with h5py.File(path, "r") as file:
             for name in sorted(file, key=lambda key: int(key.split("_")[-1])):

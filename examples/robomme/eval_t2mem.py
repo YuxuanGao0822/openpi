@@ -103,6 +103,7 @@ def main():
                 json.dumps(
                     {
                         "protocol": {
+                            "method": metadata["method"],
                             "split": "test",
                             "horizon": metadata["horizon"],
                             "execute": execute,

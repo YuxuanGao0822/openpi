@@ -20,7 +20,7 @@ def main():
         policy,
         port=args.port,
         metadata={
-            "method": "T2Mem",
+            "method": "pi05_baseline" if policy.model.stage == "stage1" else "T2Mem",
             "horizon": config.horizon,
             "execute": config.execute,
             "write_stride": config.write_stride,

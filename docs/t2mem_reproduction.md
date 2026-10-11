@@ -1,5 +1,7 @@
 # T²Mem：openpi π0.5 复现与 RoboMME 运行手册
 
+**当前实验：单张 A100 80G、物理 GPU 6、只训练 PickXtimes，并比较 π0.5 baseline。请使用 [专用服务器手册](pickxtimes_a100.md)，路径为 `/data1/workspace/gaoyuxuan/openpi`。本页保留方法对应和完整 benchmark 的通用配置。**
+
 本实现依据用户提供的 **2609.36720v1：T²Mem: Learning Test-Time Memory for Robotics**，以当前仓库的 `PI0Pytorch`、PaliGemma 和 Gemma action expert 为骨干。模型、数据处理、训练、推理和 RoboMME test split 评测已经接通。Mac 上仅作静态验证；下面的依赖安装、数值测试、训练、推理和仿真命令全部在 Linux GPU 服务器执行。
 
 作者的 [项目页](https://yzliu84.github.io/T2MEM-project/) 在 2026-10-11 标注 Code Coming soon。本实现是从原文重建的方法实现，不是作者尚未发布的代码。实验分数须由服务器训练与评测产生。

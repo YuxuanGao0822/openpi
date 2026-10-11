@@ -84,6 +84,11 @@ def main():
     parser.add_argument("--write-stride", type=int, default=16)
     parser.add_argument("--non-adaptive", action="store_true")
     parser.add_argument("--activation-checkpointing", action="store_true")
+    parser.add_argument(
+        "--activation-offload",
+        action="store_true",
+        help="Store tensors saved for backward on CPU; retains full sequence gradients",
+    )
     args = parser.parse_args()
     if args.stage == "stage1" and not (args.base_weights or args.resume):
         parser.error("Stage 1 requires --base-weights or --resume")
@@ -172,9 +177,11 @@ def main():
                 )
             current_phase = phase
         opt = optimizers[phase]
-        opt.zero_grad(set_to_none=True)
+        model.zero_grad(set_to_none=True)
+        torch.cuda.reset_peak_memory_stats(device)
         task = task_schedule[step]
         total_loss = 0.0
+        sequence_frames_max = 0
         for micro in range(accumulation):
             episode = dataset[random.choice(dataset.by_task[task])]
             start = int(episode["execution_start"])
@@ -183,14 +190,24 @@ def main():
             else:
                 endpoint = random.choice(list(range(start, len(episode["actions"]), args.supervise_stride)))
                 indices = sequence_indices(episode, endpoint, config, args.supervise_stride)
+            sequence_frames_max = max(sequence_frames_max, len(indices))
             sync = runner.no_sync() if world > 1 and micro < accumulation - 1 else nullcontext()
             with sync:
-                loss = runner(episode, indices, transform, args.supervise_stride, device) / accumulation
+                offload = (
+                    torch.autograd.graph.save_on_cpu(pin_memory=True) if args.activation_offload else nullcontext()
+                )
+                with offload:
+                    loss = runner(episode, indices, transform, args.supervise_stride, device) / accumulation
                 loss.backward()
             total_loss += loss.detach().item()
         opt.step()
         if rank == 0:
-            print(f"step={step + 1} phase={phase} task={task} loss={total_loss:.6f}", flush=True)
+            peak_gib = torch.cuda.max_memory_allocated(device) / 2**30
+            print(
+                f"step={step + 1} phase={phase} task={task} loss={total_loss:.6f} "
+                f"sequence_frames_max={sequence_frames_max} peak_allocated_gib={peak_gib:.2f}",
+                flush=True,
+            )
         if (step + 1) % args.save_every == 0 or step + 1 == args.updates:
             rng = {
                 "python": random.getstate(),
